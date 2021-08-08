@@ -3,15 +3,15 @@ import os
 from datetime import timedelta
 
 import pyflink
-from pyflink.common import RestartStrategies
-from pyflink.common.serialization import SimpleStringSchema
+from pyflink.common import RestartStrategies, Row
+from pyflink.common.serialization import SimpleStringSchema, JsonRowDeserializationSchema, DeserializationSchema
 from pyflink.common.typeinfo import BasicTypeInfo
 from pyflink.datastream import StreamExecutionEnvironment, CheckpointingMode
 # 测试 kafka 配置
 from pyflink.datastream.connectors import FlinkKafkaConsumer
 
-TEST_KAFKA_SERVERS = "localhost:9092"
-TEST_KAFKA_TOPIC = "pyflink_source"
+TEST_KAFKA_SERVERS = "192.168.50.154:9092"
+TEST_KAFKA_TOPIC = "pyflink_source1"
 TEST_GROUP_ID = "pyflink_group"
 TEST_SINK_TOPIC = "pyflink_sink"
 PYTHON_EXECUTABLE = "C:/python_env/python38_flink/Scripts/python.exe"
@@ -48,8 +48,12 @@ def get_kafka_producer_properties(servers):
 
 
 def run():
+    print(BasicTypeInfo.STRING_TYPE_INFO())
     print(os.path.join(os.path.dirname(pyflink.__file__), 'lib'))
     print("================================================")
+    jsonstr = json.loads("{\"a\":1}")
+    print(jsonstr["a"])
+    print(type(jsonstr))
     # 获取运行环境
     env = StreamExecutionEnvironment.get_execution_environment()
     # 设置环境
@@ -89,12 +93,20 @@ def run():
                                                     deserialization_schema=SimpleStringSchema()).set_commit_offsets_on_checkpoints(True)
                                  ).uid("test_kafka_source_000001").name(f"消费{TEST_KAFKA_TOPIC}主题数据")
 
-    data_stream.print()
-    # data_stream.map(lambda value: json.loads(s=value, encoding="utf-8")).name("转成json") \
+    # data_stream.map(lambda value: json.loads(s=value)).name("转成json") \
     #     .map(lambda value: json.dumps(value), BasicTypeInfo.STRING_TYPE_INFO()).name("转成str") \
     #     .print()
 
+    # kafka中数据样例{"name":"w4","times":3} {"name":"w1","times":2}
+    data_stream.map(string_to_json_dict).key_by(lambda value: value[0]).reduce(lambda v1, v2: Row(v1[0], v1[1] + v2[1])).print()
+
     env.execute("测试pyflink读取kafka")
+
+
+def string_to_json_dict(jsonstr):
+    d = json.loads(jsonstr)
+    r = Row(d["name"], d["times"])
+    return r
 
 
 if __name__ == '__main__':
